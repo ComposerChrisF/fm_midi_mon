@@ -1,0 +1,20 @@
+[package]
+name = "fm_midi_mon"
+version = "0.0.1"
+edition = "2021"
+authors = ["Chris Fraley <chris@fraleymusic.com>"]
+
+description = "A comprehensive MIDI monitor"
+
+[workspace]
+members = ["xtask"]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+nih_plug = { path = "../nih_plug", features = ["assert_process_allocs"] }
+nih_plug_iced = { path = "../nih_plug/nih_plug_iced", features = ["opengl_canvas"] }
+
+atomic_float = "1.1.0"
+crossbeam = "0.8"
