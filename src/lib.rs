@@ -62,7 +62,11 @@ impl Default for MidiMonitorParams {
 
 impl MidiMonitor {
     fn send_f32(&mut self, cc_num: u8, value: f32) {
-        self.send_u8(cc_num, (value * 127.0) as u8)
+        let b = (value * 127.0) as u8;
+        //if (b as f32 - value * 127.0).abs() > 0.001 { 
+        //    log_this(&format!("cc={cc_num}, b={b}, v*127={}, v={value}", value * 127.0)); 
+        //}
+        self.send_u8(cc_num, b)
     }
     fn send_u8(&mut self, cc_num: u8, value: u8) {
         let cc = CcValueTime { cc_num, value, instant: Instant::now() };
@@ -141,7 +145,7 @@ impl Plugin for MidiMonitor {
                 }
                 NoteEvent::MidiPitchBend { timing:_, channel:_, value } => {
                     //self.sender.send(CcValueTime { cc: 10, value: 10, instant: Instant::now() }).unwrap();
-                    self.send_f32(Cc::PitchWheel.to_index(), value);
+                    self.send_f32(Cc::PitchBend.to_index(), value);
                 }
                 _ => {},
             }

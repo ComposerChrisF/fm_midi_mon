@@ -49,10 +49,13 @@ pub struct CcValueTime {
 
 /// State for a [`CcMeter`].
 #[derive(Debug)]
-pub struct      State {
+pub struct State {
     //pub receiver: Receiver<CcValueTime>,
     pub cc_queue: Arc<ArrayQueue<CcValueTime>>,
 
+    // TODO: Move this to a struct that doesn't get dropped every time GUI closes.  Perhaps owned 
+    // TODO: by lib.rs's MidiMonitor struct, perhaps make Arc<Mutex<Vec<CcValueTimeHistory>>>
+    // TODO: and "owned" by lib.rs and re-passed to current GUI.
     /// The current cc values
     cc_histories: Mutex<Vec<CcValueTimeHistory>>,    // Must be created with an entry for each CC
 }
