@@ -1,0 +1,80 @@
+===================================================================================================
+=== TO DO LIST
+===================================================================================================
+
+- Theme support via loading JSON file
+    - Allow me to more quickly settle on good values for GUI, perhaps with standard light/dark themes
+    - Espcially if there's some kind of hot reload (check file date every 2-3 seconds, if GUI open)
+- Dynamically resize GUI
+    - Just enforce minimum width/height
+    - Allow user to resize with mouse
+        - by default should scale all GUI by %.  This makes hires support trivial: everything scales!
+    - Independently allow vertical/horizontal scaling/zooming
+        - i.e. making text larger/smaller
+        - i.e. making CC slider taller/shorter or wider/skinnier (independently)
+- Fix sizing
+    - Font size for CC values and names
+- Load CC names from JSON file
+    - Have short, medium, full names
+- Allow user to choose default naming (CC#, short name; allow override for specific CCs)
+    - Also allow control of value display (decimal, hex, %, float)
+
+- Add mapping
+    - Allow re-mapping of CC values and which CC
+    - If modifying CC values, display input value at top and output value at bottom; Allow GUI to
+            display either/both.
+        - QUESTION: what would "both" look like?  Left half of slider the input, right the output?
+            Different colors? Options?
+    - If modifying which CC, show incoming CC#/name at top, and outgoing on bottom
+    - Therefore, might be best that the "default" when no mapping is the name first at top, then 
+            value, then slider.  So mapping (or mute) adds text (or graphic) after the slider
+    - Have mute button per CC for easy "don't let this through".
+    - Also have some kind of "anti-jitter" ability.  E.g. only allow CC through if previously seen
+            value is more than +/- 4.
+    - Note any mapping or jitter processing will have to happen on the audio thread, not the GUI,
+            so the message passing will need to incorporate pre/post values and CC#s.
+    - For notes, support octave up/down buttons (perhaps triggered by incoming MIDI!)
+
+- Allow GUI selection of CC
+    - Shows history of that CC on graph
+    - Allows changing mapping curve
+    - shows input and output metering to see how curve affects CC
+    - QUESTION: Allow pairing CCs to for MSB, LSB?  How are these "latched"?
+    - Show extra CC information (like short and full names, CC#, value in decimal, hex, float, %)
+    - Some of this info would be useful to display in a status bar during mouse hover!
+
+- Allow "pinning" of CCs
+    - User can toggle "all CCs" vs. "active CCs" (any seen, sticky) vs. "recent CCs" (i.e. with 
+            timeout where they get removed again)
+        - User can also override on per-CC basis 
+            - e.g. "active", but always show Mod, Vol, Expr, Pitch
+            - e.g. "all CCs", but never CCs 18-42
+            - e.g. "recent", but sticky for Mod, Vol, Expr, etc.
+    - Need explicit notation for CC with unseen value (e.g. "-" or "n/a")
+    - How to display/generate All Notes Off, etc.  One mode is just display like any other CC.  
+            But also should know how to interpret!
+    - Allow drag & drop reordering of CCs
+
+- Allow User to add different meters, possibly in duplicate because of mapping capabilities!
+    - Add CC Mon (current impl.)
+    - Keyboard (full, or compact with vertical octave indicator)
+    - Fretboard
+    - Special CC inspector/generator (e.g. NRPN and RPN)
+
+
+===================================================================================================
+=== FUTURE
+===================================================================================================
+
+- Allow building GUI to show specific CCs / Notes in speicific ways (i.e. custom visualization)
+- Allow building GUI to generate specific MIDI (CCs/Notes/etc.) from presses or sliders, XY pads, etc.
+    - Internal octave up/down buttons
+- Allow MIDI automation of anything in MIDI Mon by incoming MIDI (or perhaps constrained to a specific channel)
+    - This might be useful for switching between modes of operation 
+        - E.g. remap for SWAM vs. Syncron
+        - E.g. using M32 keyboard vs. Linnstrument vs. Striso
+    - If generated MIDI can include time-based stuff, it could become a gesture generator!
+- Generalize with MIDI generators of various sorts
+    - MIDI delay/echo (e.g. time-based)
+    - Generate gestures
+    - Generate "setup" data for synth (e.g. SWAM requires expr/mod to have been jiggled)
