@@ -33,7 +33,7 @@ pub struct CcMeter<'a, Message> {
 }
 
 
-const MAX_HISTORY: usize = 100;
+pub const MAX_HISTORY: usize = 100;
 
 #[derive(Clone, Debug)]
 pub struct CcValueTimeHistory {
@@ -43,8 +43,33 @@ pub struct CcValueTimeHistory {
 #[derive(Copy, Clone, Debug)]
 pub struct CcValueTime {
     pub cc_num:  u8,
-    pub value:   u8,
+    /// `value` ranges from 0.0..=1.0 (i.e. 0.0 to 1.0, inclusive).  Traditional 0-127 MIDI values
+    /// are encoded as `byte as f32 / 127.0`.  14-bit controllers are encoded analogously encoded
+    /// into the 0.0..=1.0 range.
+    pub value:   f32,   // 0.0..=1.0; Most CCs are a single 7-bit byte / 127.0; PitchBend is two 7-bit bytes (14-bits total), still encoded 0.0..=1.0
     pub instant: Instant,
+}
+
+impl CcValueTime {
+    pub fn f32_value_to_u8(value: f32) -> u8 { (value * 127.0).round() as u8 }
+    pub fn u8_value_to_f32(value: u8) -> f32 { (value as f32) / 127.0 }
+
+    pub fn get_value_as_u8(&self) -> u8 {
+        (self.value * 127.0).round() as u8
+    }
+
+    pub fn get_value_as_127(&self) -> f32 {
+        self.value * 127.0
+    }
+}
+
+pub fn create_cc_histories() -> Arc<Mutex<Vec<CcValueTimeHistory>>> {
+    let mut histories = Vec::with_capacity(midi::CC_MAX);
+    for _ in 0..midi::CC_MAX {
+        histories.push(CcValueTimeHistory { history: VecDeque::with_capacity(MAX_HISTORY) });
+    }
+
+    Arc::new(Mutex::new(histories))
 }
 
 /// State for a [`CcMeter`].
@@ -53,23 +78,17 @@ pub struct State {
     //pub receiver: Receiver<CcValueTime>,
     pub cc_queue: Arc<ArrayQueue<CcValueTime>>,
 
-    // TODO: Move this to a struct that doesn't get dropped every time GUI closes.  Perhaps owned 
-    // TODO: by lib.rs's MidiMonitor struct, perhaps make Arc<Mutex<Vec<CcValueTimeHistory>>>
-    // TODO: and "owned" by lib.rs and re-passed to current GUI.
-    /// The current cc values
-    cc_histories: Mutex<Vec<CcValueTimeHistory>>,    // Must be created with an entry for each CC
+    /// The current cc values.  This value is created and "owned" my lib.rs's MidiMonitor, and 
+    /// simply re-passed in as a parameter to State::new() every time GUI is recreated.  This
+    /// way, we don't lose our history when the GUI is closed!
+    cc_histories: Arc<Mutex<Vec<CcValueTimeHistory>>>,    // Must be created with an entry for each CC
 }
 
 impl State {
-    pub fn new(cc_queue: Arc<ArrayQueue<CcValueTime>>) -> Self {
-        let mut histories = Vec::with_capacity(midi::CC_MAX);
-        for _ in 0..midi::CC_MAX {
-            histories.push(CcValueTimeHistory { history: VecDeque::with_capacity(MAX_HISTORY) });
-        }
-
+    pub fn new(cc_queue: Arc<ArrayQueue<CcValueTime>>, cc_histories: Arc<Mutex<Vec<CcValueTimeHistory>>>) -> Self {
         State {
             cc_queue,
-            cc_histories: Mutex::new(histories),
+            cc_histories,
         }
     }
 }
@@ -248,7 +267,7 @@ where
                     lerp_color(alpha, Color::from_rgb(0.85, 0.9, 0.85), Color::from_rgb(1.0, 1.0, 1.0)) 
                 };
                 //log_this(&format!("cc:{}, a:{alpha:.3}, i_last:{}, c:{color:?}, sec:{sec:.3}, now:{now:?}, cc_inst:{:?}", cc_info.cc, i != last, cc_info.instant));
-                let y = cc_slider_oy + cc_slider_height  * ((127 - cc_info.value) as f32 / 127.0);
+                let y = cc_slider_oy + cc_slider_height  * (1.0 - cc_info.value);
                 renderer.fill_quad(quad_from_bounds(x, y, cc_width, 1.0), color);
             }
         }

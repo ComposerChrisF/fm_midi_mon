@@ -1,9 +1,9 @@
 use crossbeam::queue::ArrayQueue;
 use nih_plug::prelude::{Editor, GuiContext};
 use nih_plug_iced::*;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-use crate::{cc_mon::{self, CcValueTime, State}, MidiMonitorParams};
+use crate::{cc_mon::{self, CcValueTime, CcValueTimeHistory, State}, MidiMonitorParams};
 
 // Makes sense to also define this here, makes it a bit easier to keep track of
 pub(crate) fn default_state() -> Arc<IcedState> {
@@ -13,9 +13,10 @@ pub(crate) fn default_state() -> Arc<IcedState> {
 pub(crate) fn create(
     params: Arc<MidiMonitorParams>,
     cc_queue: Arc<ArrayQueue<CcValueTime>>,
+    cc_histories: Arc<Mutex<Vec<CcValueTimeHistory>>>,
     editor_state: Arc<IcedState>,
 ) -> Option<Box<dyn Editor>> {
-    create_iced_editor::<GainEditor>(editor_state, (params, cc_queue))
+    create_iced_editor::<GainEditor>(editor_state, (params, cc_queue, cc_histories))
 }
 
 struct GainEditor {
@@ -35,16 +36,16 @@ enum Message {
 impl IcedEditor for GainEditor {
     type Executor = executor::Default;
     type Message = Message;
-    type InitializationFlags = (Arc<MidiMonitorParams>, Arc<ArrayQueue<CcValueTime>>);
+    type InitializationFlags = (Arc<MidiMonitorParams>, Arc<ArrayQueue<CcValueTime>>, Arc<Mutex<Vec<CcValueTimeHistory>>>);
 
     fn new(
-        (params, cc_queue): Self::InitializationFlags,
+        (params, cc_queue, cc_histories): Self::InitializationFlags,
         context: Arc<dyn GuiContext>,
     ) -> (Self, Command<Self::Message>) {
         let editor = GainEditor {
             params,
             context,
-            cc_mon_state: State::new(cc_queue),
+            cc_mon_state: State::new(cc_queue, cc_histories),
         };
 
         (editor, Command::none())

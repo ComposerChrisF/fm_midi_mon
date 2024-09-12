@@ -1,9 +1,9 @@
-use cc_mon::CcValueTime;
+use cc_mon::{CcValueTime, CcValueTimeHistory};
 use crossbeam::queue::ArrayQueue;
 use midi::Cc;
 use nih_plug::prelude::*;
 use nih_plug_iced::IcedState;
-use std::{sync::Arc, time::Instant};
+use std::{sync::{Arc, Mutex}, time::Instant};
 
 mod editor;
 mod midi;
@@ -14,6 +14,7 @@ mod cc_mon;
 struct MidiMonitor {
     params: Arc<MidiMonitorParams>,
     cc_queue: Arc<ArrayQueue<CcValueTime>>,
+    cc_histories: Arc<Mutex<Vec<CcValueTimeHistory>>>,    // Must be created with an entry for each CC.  Don't access directly from MidiMonitor thread, only from GUI thread!
 }
 
 #[derive(Params)]
@@ -29,10 +30,10 @@ struct MidiMonitorParams {
 
 impl Default for MidiMonitor {
     fn default() -> Self {
-        //let (sender, receiver) = crossbeam::channel::bounded(1000);
         Self {
             params:   Arc::new(MidiMonitorParams::default()),
-            cc_queue: Arc::new(ArrayQueue::<CcValueTime>::new(1000))
+            cc_queue: Arc::new(ArrayQueue::<CcValueTime>::new(1000)),
+            cc_histories: cc_mon::create_cc_histories(),
         }
     }
 }
@@ -61,14 +62,8 @@ impl Default for MidiMonitorParams {
 }
 
 impl MidiMonitor {
+    fn send_u8( &mut self, cc_num: u8, value: u8 ) { self.send_f32(cc_num, CcValueTime::u8_value_to_f32(value)) }
     fn send_f32(&mut self, cc_num: u8, value: f32) {
-        let b = (value * 127.0) as u8;
-        //if (b as f32 - value * 127.0).abs() > 0.001 { 
-        //    log_this(&format!("cc={cc_num}, b={b}, v*127={}, v={value}", value * 127.0)); 
-        //}
-        self.send_u8(cc_num, b)
-    }
-    fn send_u8(&mut self, cc_num: u8, value: u8) {
         let cc = CcValueTime { cc_num, value, instant: Instant::now() };
         // When our GUI is not visible, the queue will fill up, since there's nothing reading from
         // the queue. This is perfectly okay, and force_push() will simply overwrite the oldest 
@@ -106,6 +101,7 @@ impl Plugin for MidiMonitor {
         editor::create(
             self.params.clone(),
             self.cc_queue.clone(),
+            self.cc_histories.clone(),
             self.params.editor_state.clone(),
         )
     }
