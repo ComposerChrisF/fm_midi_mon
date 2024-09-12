@@ -7,7 +7,7 @@ use crate::{cc_mon::{self, CcValueTime, CcValueTimeHistory, State}, MidiMonitorP
 
 // Makes sense to also define this here, makes it a bit easier to keep track of
 pub(crate) fn default_state() -> Arc<IcedState> {
-    IcedState::from_size(400, 250)
+    IcedState::from_size(680, 250)
 }
 
 pub(crate) fn create(
@@ -71,18 +71,18 @@ impl IcedEditor for GainEditor {
             .align_items(Alignment::Center)
             .push(
                 Text::new("MIDI Mon")
-                    .font(assets::NOTO_SANS_LIGHT)
-                    .size(40)
-                    .height(50.into())
+                    .font(assets::NOTO_SANS_BOLD)
+                    .size(30)
+                    .height(26.into())
                     .width(Length::Fill)
                     .horizontal_alignment(alignment::Horizontal::Center)
                     .vertical_alignment(alignment::Vertical::Bottom),
             )
-            .push(Space::with_height(10.into()))
+            .push(Space::with_height(5.into()))
             .push(
                 cc_mon::CcMeter::new(&mut self.cc_mon_state)
                     .width(Length::Fill)
-                    .height(100.into())
+                    .height(190.into())
             )
             .into()
     }

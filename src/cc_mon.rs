@@ -9,9 +9,9 @@ use std::time::Instant;
 
 use nih_plug_iced::backend::Renderer;
 use nih_plug_iced::renderer::Renderer as GraphicsRenderer;
-use nih_plug_iced::text::Renderer as TextRenderer;
+use nih_plug_iced::text::{self, Renderer as TextRenderer};
 use nih_plug_iced::{
-    layout, renderer, Color, Element, Font, Layout, Length, Point, Rectangle, Size, Widget
+    alignment, layout, renderer, Color, Element, Font, Layout, Length, Point, Rectangle, Size, Widget
 };
 
 use crate::midi;
@@ -40,6 +40,16 @@ pub struct CcValueTimeHistory {
     pub history: VecDeque<CcValueTime>,     // "back" is most recent; "front" is oldest.  When size == MAX_HISTORY, then discard one from front
 }
 
+pub fn create_cc_histories() -> Arc<Mutex<Vec<CcValueTimeHistory>>> {
+    let mut histories = Vec::with_capacity(midi::CC_MAX);
+    for _ in 0..midi::CC_MAX {
+        histories.push(CcValueTimeHistory { history: VecDeque::with_capacity(MAX_HISTORY) });
+    }
+
+    Arc::new(Mutex::new(histories))
+}
+
+
 #[derive(Copy, Clone, Debug)]
 pub struct CcValueTime {
     pub cc_num:  u8,
@@ -63,14 +73,6 @@ impl CcValueTime {
     }
 }
 
-pub fn create_cc_histories() -> Arc<Mutex<Vec<CcValueTimeHistory>>> {
-    let mut histories = Vec::with_capacity(midi::CC_MAX);
-    for _ in 0..midi::CC_MAX {
-        histories.push(CcValueTimeHistory { history: VecDeque::with_capacity(MAX_HISTORY) });
-    }
-
-    Arc::new(Mutex::new(histories))
-}
 
 /// State for a [`CcMeter`].
 #[derive(Debug)]
@@ -100,12 +102,14 @@ fn length_of_f32(f: f32) -> Length {
 impl<'a, Message> CcMeter<'a, Message> {
     pub const CC_MAX: usize = midi::CC_MAX;
 
-    pub const CC_WIDTH:         f32 = 5.0;
-    pub const LED_HEIGHT:       f32 = Self::CC_WIDTH;
-    pub const CC_SLIDER_HEIGHT: f32 = 128.0;
-    pub const CC_NAME_HEIGHT:   f32 = Self::CC_WIDTH;
-    pub const CC_VALUE_HEIGHT:  f32 = Self::CC_NAME_HEIGHT;
-    pub const UI_HEIGHT:        f32 = Self::LED_HEIGHT + Self::CC_SLIDER_HEIGHT + Self::CC_NAME_HEIGHT + Self::CC_VALUE_HEIGHT;
+    pub const CC_VERT_SPACER:       f32 = 2.0;
+    pub const CC_WIDTH_MIN:         f32 = 3.0;
+    pub const CC_WIDTH_SHOW_LABELS: f32 = 11.0;
+    pub const CC_WIDTH_MAX:         f32 = 35.0;
+    pub const CC_SLIDER_HEIGHT:     f32 = 128.0;
+    pub const CC_VALUE_HEIGHT:      f32 = 30.0;
+    pub const CC_NAME_HEIGHT:       f32 = Self::CC_VALUE_HEIGHT;
+    pub const UI_HEIGHT:            f32 = Self::CC_VERT_SPACER + Self::CC_SLIDER_HEIGHT + Self::CC_VALUE_HEIGHT + Self::CC_NAME_HEIGHT + Self::CC_VERT_SPACER;
 
     /// Creates a new [`CcMeter`] which displays the current value of CCs as well as a visual 
     /// history of values.
@@ -113,7 +117,7 @@ impl<'a, Message> CcMeter<'a, Message> {
         Self {
             state,
 
-            width:  length_of_f32(Self::CC_WIDTH * midi::CC_MAX as f32),
+            width:  length_of_f32(Self::CC_WIDTH_MIN * midi::CC_MAX as f32),
             height: length_of_f32(Self::UI_HEIGHT),
             text_size: None,
             font: <Renderer as TextRenderer>::Font::default(),
@@ -136,6 +140,11 @@ impl<'a, Message> CcMeter<'a, Message> {
         let entry = &mut cc_histories[cc_num];
         if entry.history.len() == MAX_HISTORY { entry.history.pop_front(); }
         entry.history.push_back(*value);
+    }
+
+    pub fn count_of_active_ccs(&self) -> usize {
+        let cc_histories = self.state.cc_histories.lock().unwrap();
+        cc_histories.iter().filter(|h| !h.history.is_empty()).count()
     }
 
     /// Sets the width of the [`CcMeter`].
@@ -174,6 +183,20 @@ fn lerp_color(frac: f32, c0: Color, c1: Color) -> Color {
     )
 }
 
+    
+fn lerp_jolt(frac: f32, v0_jolt: f32, v0: f32, v1: f32, v1_jolt: f32) -> f32 {
+    if frac <= 0.0 { return v0_jolt; }
+    if frac >= 1.0 { return v1_jolt; }
+    v0 + (v1 - v0) * frac
+}
+fn lerp_jolt_color(frac: f32, c0_jolt: Color, c0: Color, c1:Color, c1_jolt: Color) -> Color {
+    Color::from_rgb(
+        lerp_jolt(frac, c0_jolt.r, c0.r, c1.r, c1_jolt.r), 
+        lerp_jolt(frac, c0_jolt.g, c0.g, c1.g, c1_jolt.g), 
+        lerp_jolt(frac, c0_jolt.b, c0.b, c1.b, c1_jolt.b), 
+    )
+}
+
 fn quad_from_bounds(x: f32, y: f32, width: f32, height: f32) -> Quad {
     Quad { 
         border_color:  Color::TRANSPARENT,
@@ -182,6 +205,8 @@ fn quad_from_bounds(x: f32, y: f32, width: f32, height: f32) -> Quad {
         bounds: Rectangle { x, y, width, height },
     }
 }
+
+
 
 impl<'a, Message> Widget<Message, Renderer> for CcMeter<'a, Message>
 where
@@ -211,64 +236,121 @@ where
         _viewport: &Rectangle,
     ) {
         self.update_from_state();
+        let cc_count = self.count_of_active_ccs();
 
         let bounds = layout.bounds();
+        let oy_vert_spacer = (Self::CC_VERT_SPACER / Self::UI_HEIGHT) * bounds.height;
+        let width_cc = (bounds.width / cc_count as f32).clamp(Self::CC_WIDTH_MIN, Self::CC_WIDTH_MAX);
+        let width_dx_max = (width_cc * 0.5).max(1.0);
+        let should_show_labels = true || width_cc >= Self::CC_WIDTH_SHOW_LABELS;
+        let height_cc_slider = (Self::CC_SLIDER_HEIGHT / Self::UI_HEIGHT) * bounds.height;
+        let height_value = (Self::CC_VALUE_HEIGHT / Self::UI_HEIGHT) * bounds.height;
+        let y_cc_slider  = bounds.y + oy_vert_spacer;
+        let y_value_text = y_cc_slider + height_cc_slider + oy_vert_spacer;
+        let y_name_text  = y_value_text + height_value;
+        let color_text = Color::from_rgb(0.0, 0.0, 1.0);
 
-        let cc_width = Self::CC_WIDTH;
-        let cc_slider_height = (Self::CC_SLIDER_HEIGHT / Self::UI_HEIGHT) * bounds.height;
-        let cc_slider_oy     = bounds.y + (Self::LED_HEIGHT / Self::UI_HEIGHT) * bounds.height;
 
-        //let text_size = self
-        //    .text_size
-        //    .unwrap_or_else(|| (renderer.default_size() as f32 * 1.0).round() as u16);
-        //
-        //let s = format!("V: x{} y{} w{} h{}", viewport.x, viewport.y, viewport.width, viewport.height);
-        //let s = format!("{s}\nL: x{} y{} w{} h{}", bounds.x, bounds.y, bounds.width, bounds.height);
-        //renderer.fill_text(text::Text {
-        //    content: &s,
-        //    font: self.font,
-        //    size: text_size as f32,
-        //    bounds: Rectangle { x: bounds.x, y: bounds.y + bounds.height, width: bounds.width, height: bounds.height },
-        //    color: Color::from_rgb(0.0, 0.0, 0.5),
-        //    horizontal_alignment: alignment::Horizontal::Left,
-        //    vertical_alignment: alignment::Vertical::Bottom,
-        //});
         let back_color = Color::from_rgb(0.2, 0.1, 0.1);
         let now = Instant::now();
 
-        // Show the current value as a white line
-        let cc_histories = self.state.cc_histories.lock().unwrap();
-        for (cc_num, cc_history) in cc_histories.iter().enumerate() {
-            let x = bounds.x + (cc_num as f32 * Self::CC_WIDTH);
-            // Fill the entire background for CC UI (i.e. LED, slider, and text areas)
-            renderer.fill_quad(quad_from_bounds(x, bounds.y, cc_width, bounds.height), back_color);
+        // Draw a black box around where sliders go
+        {
+            let mut q = quad_from_bounds(bounds.x, bounds.y, bounds.width, oy_vert_spacer + height_cc_slider + oy_vert_spacer);
+            q.border_color = Color::BLACK;
+            q.border_width = 2.0;
+            renderer.fill_quad(q, Color::TRANSPARENT);
+        }
 
-            // Draw slider info
-            // TODO: Allow some form of external theming, perhaps including two (or more) fade out times and colors.
-            // TODO: This could be via a theme.txt file that gets checked periodically and hot-loaded... this would let me quickly try different combinations
-            // TODO: Params: backcolor, current color, history0 color, fade time, fade pow, history1 color, fade time, fade pow, history2 color, min alpha, maxhistory event count
-            // TODO: More: min CC_WIDTH, min line height, line height
-            // TODO: Gui Settings: Show only active CCs (seconds); Show only used CCs (sticky); Show all CCs; Auto CC width (max width), horizontal scroll? (Would be nice for multiple CC histories?)
-            // TOOD: Features: Mute, map (both to different CC, and scale values), show before/after (toggle), show history, right-click menus (hide this CC, unhide CC (choose from list), show history)
-            // TODO: Where to show CC history: Inline or in **seperate graph below**?
+        // Show the current value as a white line
+        let should_show_only_active = true;
+        let cc_histories = self.state.cc_histories.lock().unwrap();
+        let mut i_cc = 0_usize;
+        for (cc_num, cc_history) in cc_histories.iter().enumerate() {
+            let i = if should_show_only_active { 
+                if cc_history.history.is_empty() { continue; }
+                let i = i_cc;
+                i_cc += 1;
+                i
+            } else { 
+                cc_num 
+            };
+            
+            let x = bounds.x + (i as f32 * width_cc);
+
+            // Fill the cc "slider" background for CC UI (i.e. LED, slider, and text areas)
+            renderer.fill_quad(quad_from_bounds(x, y_cc_slider, width_cc, height_cc_slider), back_color);
+
+            // Draw the text
             let last = cc_history.history.len() - 1;
+            if should_show_labels {
+                let cc_value = cc_history.history[last].value;
+                let text_value = format!("{}", CcValueTime::f32_value_to_u8(cc_value));
+                let text_num   = &format!("c{cc_num}");
+                let text_name  = midi::NAMES[cc_num].unwrap_or(text_num);
+                let text_size = self
+                    .text_size
+                    .unwrap_or_else(|| (renderer.default_size() as f32 * 0.9).round() as u16);
+                renderer.fill_text(text::Text{
+                    content: &text_value,
+                    font: self.font,
+                    size: text_size as f32,
+                    bounds: Rectangle { x: x + width_cc * 0.5, y: y_value_text, width: width_cc, height: height_value },
+                    color: color_text,
+                    horizontal_alignment: alignment::Horizontal::Center,
+                    vertical_alignment: alignment::Vertical::Top,
+                });
+                renderer.fill_text(text::Text{
+                    content: &text_name,
+                    font: self.font,
+                    size: text_size as f32,
+                    bounds: Rectangle { x: x + width_cc * 0.5, y: y_name_text, width: width_cc, height: height_value },
+                    color: color_text,
+                    horizontal_alignment: alignment::Horizontal::Center,
+                    vertical_alignment: alignment::Vertical::Top,
+                });
+            }
+
+            // TODO: Allow some form of external theme, perhaps including two (or more) fade out 
+            //          times and colors, in addition to every conceivable option for color, size,
+            //          etc. for current graphics.
+            // TODO: This could be via a theme.txt file that gets checked periodically and 
+            //          hot-loaded... this would let me quickly try different combinations!
+            // TODO: Gui Settings: Show only active CCs (seconds); Show only used CCs (sticky); 
+            //          Show all CCs; Auto CC width (max width), horizontal scroll? (Would be 
+            //          nice for multiple CC histories?)
+            // TOOD: Features: Mute, map (both to different CC, and scale values), show 
+            //          before/after (toggle), show history, right-click menus (hide this CC, 
+            //          unhide CC (choose from list), show history)
+            // TODO: Where to show CC history: Inline or in **seperate graph below**? (Allow 
+            //          selection of CC!)
+            
+            // Now draw individual historical values, ending with the most recent.
+            let index_offset = MAX_HISTORY - (last + 1);
             for (i, cc_info) in cc_history.history.iter().enumerate() {
                 let sec = now.duration_since(cc_info.instant).as_secs_f32(); 
                 const SEC_FADEOUT: f32 = 4.0;
                 let sec = sec.clamp(0.0, SEC_FADEOUT);
-                let frac = 1.0 - (sec / SEC_FADEOUT);
-                let alpha = frac.clamp(0.1, 1.0);
-                // NOTE: We use lerp instead of actual alpha values to avoid artefacts of old values stacking on top of each other.
-                // With using alpha, these would appear significantly brighter, even after "fading", but using lerp(), they don't
-                // stack, and the most recent one "wins".
-                let color = if i != last { 
-                    lerp_color(alpha, back_color, Color::from_rgb(0.2, 0.9, 0.2)) 
+                let age_frac = 1.0 - (sec / SEC_FADEOUT);
+                //let age_frac = age_frac.clamp(0.1, 1.0);
+                let order_frac = (i + index_offset) as f32 / MAX_HISTORY as f32;
+                // NOTE: We use lerp instead of actual alpha values to avoid artefacts of old 
+                // values stacking on top of each other.  With using alpha, these would appear 
+                // significantly brighter, even after "fading", but using lerp(), they don't
+                // get brighter when they stack, since the most recent one just "wins".
+                let (ox, color) = if i != last { 
+                    (lerp(order_frac, width_dx_max, 1.0), lerp_color(age_frac.clamp(0.1, 1.0), back_color, Color::from_rgb(0.2, 0.9, 0.2))) 
                 } else { 
-                    lerp_color(alpha, Color::from_rgb(0.85, 0.9, 0.85), Color::from_rgb(1.0, 1.0, 1.0)) 
+                    (lerp(age_frac, (4.0_f32).min(width_dx_max), 0.0), 
+                     // NOTE: the "jolt" won't work on the age_frac == 1.0 side, since it is 
+                     // unlikely that at least an instant hasn't passed since the CC was 
+                     // transmitted. We *could* fix this manually, by saying sec < 10msec is
+                     // treated as zero.  For now, we'll just not jolt on that side.
+                     lerp_jolt_color(age_frac, Color::from_rgb(0.6, 0.85, 0.6), Color::from_rgb(0.7, 0.9, 0.7), Color::from_rgb(1.0, 1.0, 1.0), Color::from_rgb(1.0, 1.0, 1.0))
+                    )
                 };
-                //log_this(&format!("cc:{}, a:{alpha:.3}, i_last:{}, c:{color:?}, sec:{sec:.3}, now:{now:?}, cc_inst:{:?}", cc_info.cc, i != last, cc_info.instant));
-                let y = cc_slider_oy + cc_slider_height  * (1.0 - cc_info.value);
-                renderer.fill_quad(quad_from_bounds(x, y, cc_width, 1.0), color);
+                let y = y_cc_slider + height_cc_slider  * (1.0 - cc_info.value);
+                renderer.fill_quad(quad_from_bounds(x + ox, y, width_cc - ox - ox, 1.0), color);
             }
         }
     }
