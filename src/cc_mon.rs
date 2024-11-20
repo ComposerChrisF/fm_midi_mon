@@ -77,12 +77,12 @@ impl CcValueTime {
 /// State for a [`CcMeter`].
 #[derive(Debug)]
 pub struct State {
-    //pub receiver: Receiver<CcValueTime>,
     pub cc_queue: Arc<ArrayQueue<CcValueTime>>,
 
-    /// The current cc values.  This value is created and "owned" my lib.rs's MidiMonitor, and 
-    /// simply re-passed in as a parameter to State::new() every time GUI is recreated.  This
-    /// way, we don't lose our history when the GUI is closed!
+    /// The current cc values.  While the values stored here are owned by the GUI (by cc_mon.rs), 
+    /// the storage itself is created and (from a Rust lifetime perspective) "owned" by lib.rs's 
+    /// MidiMonitor--it is simply re-passed in as a parameter to State::new() every time GUI is 
+    /// recreated.  This way, we don't lose our history when the GUI is closed!
     cc_histories: Arc<Mutex<Vec<CcValueTimeHistory>>>,    // Must be created with an entry for each CC
 }
 
@@ -249,12 +249,13 @@ where
         let y_value_text = y_cc_slider + height_cc_slider + oy_vert_spacer;
         let y_name_text  = y_value_text + height_value;
         let color_text = Color::from_rgb(0.0, 0.0, 1.0);
-
+        // TODO: Font should scale with bounds.height/.width changing, too!  Need to measure?
 
         let back_color = Color::from_rgb(0.2, 0.1, 0.1);
         let now = Instant::now();
 
-        // Draw a black box around where sliders go
+        // Draw a black box around where all of the sliders go
+        // FUTURE: Size to exactly the sliders shown, rather than full width available
         {
             let mut q = quad_from_bounds(bounds.x, bounds.y, bounds.width, oy_vert_spacer + height_cc_slider + oy_vert_spacer);
             q.border_color = Color::BLACK;
@@ -310,27 +311,18 @@ where
                     vertical_alignment: alignment::Vertical::Top,
                 });
             }
-
-            // TODO: Allow some form of external theme, perhaps including two (or more) fade out 
-            //          times and colors, in addition to every conceivable option for color, size,
-            //          etc. for current graphics.
-            // TODO: This could be via a theme.txt file that gets checked periodically and 
-            //          hot-loaded... this would let me quickly try different combinations!
-            // TODO: Gui Settings: Show only active CCs (seconds); Show only used CCs (sticky); 
-            //          Show all CCs; Auto CC width (max width), horizontal scroll? (Would be 
-            //          nice for multiple CC histories?)
-            // TOOD: Features: Mute, map (both to different CC, and scale values), show 
-            //          before/after (toggle), show history, right-click menus (hide this CC, 
-            //          unhide CC (choose from list), show history)
-            // TODO: Where to show CC history: Inline or in **seperate graph below**? (Allow 
-            //          selection of CC!)
             
             // Now draw individual historical values, ending with the most recent.
             let index_offset = MAX_HISTORY - (last + 1);
             for (i, cc_info) in cc_history.history.iter().enumerate() {
                 let sec = now.duration_since(cc_info.instant).as_secs_f32(); 
                 const SEC_FADEOUT: f32 = 4.0;
-                let sec = sec.clamp(0.0, SEC_FADEOUT);
+                // Remove 20ms to account for transit time from lib.rs thread to here.  This
+                // becomes important when we use lerp_jolt_color() below, as if sec can never
+                // be zero, then no "jolt" can happen on that side of things.  By removing
+                // 20msec (and clamping the result), we might get as much as 20msec of jolt
+                // on the seconds == 0.0 side of the color fading, which would be nice.
+                let sec = (sec - 0.020).clamp(0.0, SEC_FADEOUT);
                 let age_frac = 1.0 - (sec / SEC_FADEOUT);
                 //let age_frac = age_frac.clamp(0.1, 1.0);
                 let order_frac = (i + index_offset) as f32 / MAX_HISTORY as f32;
@@ -342,10 +334,10 @@ where
                     (lerp(order_frac, width_dx_max, 1.0), lerp_color(age_frac.clamp(0.1, 1.0), back_color, Color::from_rgb(0.2, 0.9, 0.2))) 
                 } else { 
                     (lerp(age_frac, (4.0_f32).min(width_dx_max), 0.0), 
-                     // NOTE: the "jolt" won't work on the age_frac == 1.0 side, since it is 
-                     // unlikely that at least an instant hasn't passed since the CC was 
-                     // transmitted. We *could* fix this manually, by saying sec < 10msec is
-                     // treated as zero.  For now, we'll just not jolt on that side.
+                     // NOTE: the "jolt" normally wouldn't work on the age_frac == 1.0 side, 
+                     // since it is unlikely that at least an instant hasn't passed since the CC
+                     // was transmitted.  But we "fix" this manually above, by subtracting 20msec,
+                     // thus sec < 20msec is treated as zero.
                      lerp_jolt_color(age_frac, Color::from_rgb(0.6, 0.85, 0.6), Color::from_rgb(0.7, 0.9, 0.7), Color::from_rgb(1.0, 1.0, 1.0), Color::from_rgb(1.0, 1.0, 1.0))
                     )
                 };
