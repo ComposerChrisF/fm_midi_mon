@@ -1,6 +1,20 @@
 ===================================================================================================
 === TO DO LIST
 ===================================================================================================
+- MIDI Features (for LinnStrument)
+    - Learn MIDI pitch(es); watch X/Y/Z values for this and translate to other CCs, most notably
+        pressure (Z) to CC1 (mod wheel)
+        - Allow more than one for more CCs, or keyswitches (e.g. fast/slow release, or gestures)
+        - Gesture: e.g. press keyswitch to cause last played note to "fall" (or "rise"), either 
+            in fretted mode (where a series of MIDI notes are generated), or in portamento (fretless)
+            mode where pitch wheel is used.  NOTE: Pitch Wheel could be used for both, just quantized
+            in the "fretted" mode.
+    - Turn on/off for quantizing MIDI pitch information
+        - I.e. put LinnStrument into un-quantized mode, but then do the quantizing in MidiMon so
+            I can implement fretted vs. portamento, or quantizing to just intonations, etc.
+    - Do MIDI transpose (8ves and semitones) via software, so we can still track above keyswitch for mod wheel...
+    - Translate pitch bend range from +/-24 (or one of the other choices) to +/-48 (MPE standard)
+        - Q: Why isn't +/-48 even a choice (except when entering "hidden" MPE mode?!?!)
 
 - Theme support via loading JSON file
     - Allow me to more quickly settle on good values for GUI, perhaps with standard light/dark themes
@@ -78,3 +92,24 @@
     - MIDI delay/echo (e.g. time-based)
     - Generate gestures
     - Generate "setup" data for synth (e.g. SWAM requires expr/mod to have been jiggled)
+
+
+===================================================================================================
+=== LinnStrument
+===================================================================================================
+- Convert incoming MIDI streams into:
+    - All current CC/aftertouch/etc. values (per channel)
+    - Current notes on (per channel)
+    - Current effective pitch bend (in 1/2 steps, based on map of input's PW max bend) (per channel)
+    - Apply bend to current notes on (and tails of note offs, too) (per channel)
+- Given current params:
+    - Adjust per-note (really per-channel for MPE) bend to account for pitch magnets (that are 
+    perhaps further adjusted for JI)
+    - NOTE: All "windows" below, will need to have a certain hysteresis.
+    - Pause-based magnet: Once a pitch is within window (default is 1/4 step each direction) for
+    at least x seconds, the average pitch is adjusted to the magnet pitch.  Must still allow for
+    vibrato, so will need to tweak this algorithm (and perhaps have bool switch to account or
+    ignore vibrato).
+    - Glissando-based magnet (i.e. "fretted"): magnet activates immediately, based on being within
+    window.
+- Output MIDI based on output's PW max bend (per channel)    

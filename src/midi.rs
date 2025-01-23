@@ -1,5 +1,5 @@
 
-
+#[allow(dead_code)]
 #[derive(Copy, Clone, Debug)]
 pub enum Cc {
     Controller(u8),
@@ -28,6 +28,7 @@ impl Cc {
         }
     }
 
+    #[allow(dead_code)]
     pub fn from_index(i: u8) -> Self {
         match i {
             0..=127 => Cc::Controller(i),
