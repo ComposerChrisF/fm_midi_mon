@@ -107,9 +107,10 @@ impl<'a, Message> CcMeter<'a, Message> {
     pub const CC_WIDTH_SHOW_LABELS: f32 = 11.0;
     pub const CC_WIDTH_MAX:         f32 = 35.0;
     pub const CC_SLIDER_HEIGHT:     f32 = 128.0;
-    pub const CC_VALUE_HEIGHT:      f32 = 30.0;
+    pub const CC_VALUE_HEIGHT:      f32 = 15.0;
     pub const CC_NAME_HEIGHT:       f32 = Self::CC_VALUE_HEIGHT;
-    pub const UI_HEIGHT:            f32 = Self::CC_VERT_SPACER + Self::CC_SLIDER_HEIGHT + Self::CC_VALUE_HEIGHT + Self::CC_NAME_HEIGHT + Self::CC_VERT_SPACER;
+    pub const CC_CANONICAL_HEIGHT:  f32 = Self::CC_VALUE_HEIGHT;
+    pub const UI_HEIGHT:            f32 = Self::CC_VERT_SPACER + Self::CC_SLIDER_HEIGHT + Self::CC_VALUE_HEIGHT + Self::CC_NAME_HEIGHT + Self::CC_CANONICAL_HEIGHT + Self::CC_VERT_SPACER;
 
     /// Creates a new [`CcMeter`] which displays the current value of CCs as well as a visual 
     /// history of values.
@@ -244,10 +245,12 @@ where
         let width_dx_max = (width_cc * 0.5).max(1.0);
         let should_show_labels = true || width_cc >= Self::CC_WIDTH_SHOW_LABELS;
         let height_cc_slider = (Self::CC_SLIDER_HEIGHT / Self::UI_HEIGHT) * bounds.height;
-        let height_value = (Self::CC_VALUE_HEIGHT / Self::UI_HEIGHT) * bounds.height;
+        let height_value =     (Self::CC_VALUE_HEIGHT  / Self::UI_HEIGHT) * bounds.height;
+        let height_name =      (Self::CC_NAME_HEIGHT   / Self::UI_HEIGHT) * bounds.height;
         let y_cc_slider  = bounds.y + oy_vert_spacer;
         let y_value_text = y_cc_slider + height_cc_slider + oy_vert_spacer;
         let y_name_text  = y_value_text + height_value;
+        let y_canonical_text = y_name_text + height_name;
         let color_text = Color::from_rgb(0.0, 0.0, 1.0);
         // TODO: Font should scale with bounds.height/.width changing, too!  Need to measure?
 
@@ -310,6 +313,17 @@ where
                     horizontal_alignment: alignment::Horizontal::Center,
                     vertical_alignment: alignment::Vertical::Top,
                 });
+                if cc_num <= 127 {
+                    renderer.fill_text(text::Text{
+                        content: &text_num,
+                        font: self.font,
+                        size: text_size as f32,
+                        bounds: Rectangle { x: x + width_cc * 0.5, y: y_canonical_text, width: width_cc, height: height_value },
+                        color: color_text,
+                        horizontal_alignment: alignment::Horizontal::Center,
+                        vertical_alignment: alignment::Vertical::Top,
+                    });
+                }
             }
             
             // Now draw individual historical values, ending with the most recent.

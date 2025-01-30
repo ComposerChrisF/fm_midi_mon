@@ -50,18 +50,18 @@ impl Cc {
 // TODO: Make this table one that gets loaded from disk (perhaps with a watch on the file for easy
 // reloading).  This will help prepare for load/save of user settings.
 pub const NAMES: [Option<&str>; CC_MAX] = [
-    Some("BS"),     // 0: Bank Select (MSB) (see CC32)
+    Some("BSel"),   // 0: Bank Select (MSB) (see CC32)
     Some("mod"),    // 1: Mod Wheel (MSB) (see CC33)
-    Some("br"),     // 2: Breath Controller (MSB) (see CC34)
+    Some("brth"),   // 2: Breath Controller (MSB) (see CC34)
     None,
     None,           // 4: Foot Controller (MSB) (see CC36)
-    Some("tim"),    // 5: Portomento Time (MSB) (see CC37)
+    Some("p tm"),   // 5: Portomento Time (MSB) (see CC37)
     Some("DEM"),    // 6: Data Entry (MSB) (see CC38)
     Some("vol"),    // 7: Volume (MSB) (see CC39)
     Some("bal"),    // 8: Balance (MSB) (see CC40)
     None,
     Some("pan"),    // 10: Pan (MBB) (see CC42)
-    Some("exp"),    // 11: Expression Pedal (MSB) (see CC43)
+    Some("expr"),   // 11: Expression Pedal (MSB) (see CC43)
     None,           // 12: Effect Controller 1 (MSB) (see CC44)
     None,           // 13: Effect Controller 2 (MSB) (see CC45)
     None,
@@ -114,17 +114,17 @@ pub const NAMES: [Option<&str>; CC_MAX] = [
     None,
     None,
     None,
-    Some("sus"),    // 64: Sustain Pedal (on/off)
-    Some("prt"),    // 65: Portamento (on/off)
-    Some("sos"),    // 66: Sostenuto (on/off)
-    Some("sft"),    // 67: Soft Pedal (on/off)
+    Some("sust"),   // 64: Sustain Pedal (on/off)
+    Some("port"),   // 65: Portamento (on/off)
+    Some("sost"),   // 66: Sostenuto (on/off)
+    Some("soft"),   // 67: Soft Pedal (on/off)
     Some("leg"),    // 68: Legato (on/off)
-    Some("hld"),    // 69: Hold Pedal 2
+    Some("ped2"),   // 69: Hold Pedal 2
     None,           // 70: Sound Controller 1
     None,           // 71: Sound Controller 2 (Sound Variation)
     None,           // 72: Sound Controller 3 (Release Time)
     None,           // 73: Sound Controller 4 (Attack Time)
-    None,           // 74: Sound Controller 5 (Brightness)
+    Some("y"),      // 74: Sound Controller 5 (Brightness); also MPE "Y-axis" controller
     None,           // 75: Sound Controller 6
     None,           // 76: Sound Controller 7
     None,           // 77: Sound Controller 8
@@ -170,19 +170,19 @@ pub const NAMES: [Option<&str>; CC_MAX] = [
     None,
     None,
     None,
-    Some("mut"),    // 120: Channel Mute
+    Some("chnx"),   // 120: Channel Mute
     Some("RAC"),    // 121: Reset All Controllers
     Some("LOC"),    // 122: Local Control (on/off) (0=Off, 127=On)
-    Some("AN"),     // 123: All Notes (value = 0)
-    Some("OMF"),    // 124: OMNI Mode OFF (value = 0; includes All Notes Off)
-    Some("OMN"),    // 125: OMNI Mode ON (value = 0; includes All Notes Off)
+    Some("ALLx"),   // 123: All Notes (value = 0)
+    Some("OM x"),   // 124: OMNI Mode OFF (value = 0; includes All Notes Off)
+    Some("OM +"),   // 125: OMNI Mode ON (value = 0; includes All Notes Off)
     None,           // 126: Mono Mode (includes All Notes Off, Poly Off)
     None,           // 127: Poly Mode (value = 0; includes All Notes Off, Mono Off)
-    Some("pat"),    // 128: Polyphonic Aftertouch
-    Some("pit"),    // 129: PitchBend (float)
-    Some("cat"),    // 130: Channel Aftertouch
-    Some("on"),     // 131: Note On
+    Some("AT/p"),   // 128: Polyphonic Aftertouch
+    Some("ptch"),   // 129: PitchBend (float)
+    Some("z"),      // 130: Channel Aftertouch; aka MPE's "Z-axis"
+    Some("note"),   // 131: Note On
     Some("vel"),    // 132: Velocity (Note On)
-    Some("off"),    // 133: Note Off
-    Some("ov"),     // 134: Off Velocity (Note Off)
+    Some("notex"),  // 133: Note Off
+    Some("velx"),   // 134: Off Velocity (Note Off)
 ];

@@ -10,7 +10,8 @@ mod midi;
 mod cc_mon;
 
 
-/// This is mostly identical to the gain example, minus some fluff, and with a GUI.
+/// A GUI to display important data coming through MIDI.  Usually pass-through, but will implement
+/// filtering or transformations in the future.
 struct MidiMonitor {
     params: Arc<MidiMonitorParams>,
     cc_queue: Arc<ArrayQueue<CcValueTime>>,
@@ -127,7 +128,7 @@ impl Plugin for MidiMonitor {
             match event {
                 NoteEvent::MidiCC { timing:_, channel:_, cc, value } => {
                     //self.sender.send(CcValueTime { cc: 1, value: 80, instant: Instant::now() }).unwrap();
-                    self.send_f32(cc, value,);
+                    self.send_f32(cc, value);
                 }
                 NoteEvent::NoteOn { timing:_, voice_id:_, channel:_, note, velocity } => {
                     //self.sender.send(CcValueTime { cc: 2, value: 110, instant: Instant::now() }).unwrap();
@@ -143,6 +144,12 @@ impl Plugin for MidiMonitor {
                     //self.sender.send(CcValueTime { cc: 10, value: 10, instant: Instant::now() }).unwrap();
                     self.send_f32(Cc::PitchBend.to_index(), value);
                 }
+                NoteEvent::MidiChannelPressure { timing:_, channel:_, pressure } => {
+                    self.send_f32(Cc::ChannelAftertouch.to_index(), pressure);
+                }
+                NoteEvent::PolyPressure { timing:_, voice_id:_, channel:_, note:_, pressure } => {
+                    self.send_f32(Cc::NoteAftertouch.to_index(), pressure); // FUTURE: Need note, too!
+                }
                 _ => {},
             }
             context.send_event(event);
@@ -155,7 +162,7 @@ impl Plugin for MidiMonitor {
 impl ClapPlugin for MidiMonitor {
     const CLAP_ID: &'static str = "com.fraleymusic.midi-monitor";
     const CLAP_DESCRIPTION: Option<&'static str> = Some("A MIDI monitor");
-    const CLAP_MANUAL_URL: Option<&'static str> = Some(Self::URL);
+    const CLAP_MANUAL_URL:  Option<&'static str> = Some(Self::URL);
     const CLAP_SUPPORT_URL: Option<&'static str> = None;
     const CLAP_FEATURES: &'static [ClapFeature] = &[
         ClapFeature::NoteEffect, 

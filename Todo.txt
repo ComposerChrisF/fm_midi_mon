@@ -113,3 +113,11 @@
     - Glissando-based magnet (i.e. "fretted"): magnet activates immediately, based on being within
     window.
 - Output MIDI based on output's PW max bend (per channel)    
+
+
+###################################################################################################
+### VERSION HISTORY
+###################################################################################################
+v0.0.2 (2025-01-29): Added poly/channel aftertouch; Allow for 4-char names; Added y/z MPE names; Canonical names always show; Fixed text vertical spacing; Update to current nih_plug (as of date)
+v0.0.1
+v0.0.0
