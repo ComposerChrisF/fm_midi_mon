@@ -33,7 +33,7 @@ pub struct CcMeter<'a, Message> {
 }
 
 
-pub const MAX_HISTORY: usize = 200;
+pub const MAX_HISTORY: usize = 100;
 
 
 
@@ -93,7 +93,7 @@ impl ChannelInfo {
             }
             self.note_count = 0;
         }
-        match Cc::from_index(value.cc_num) {
+        match Cc::from_cc_num(value.cc_num) {
             Cc::NoteOn => {
                 let note = value.get_value_as_127() as usize;
                 if !self.notes_on[note] { 
@@ -127,26 +127,45 @@ impl CcValueTimeHistory {
 
 #[derive(Debug)]
 pub struct Histories {
-    pub history_per_cc:   Vec<CcValueTimeHistory>,
+    pub history_per_channel_per_cc: Vec<CcValueTimeHistory>,
     pub info_per_channel: [ChannelInfo; 16],
     pub channel_id_count: u8,
 }
 
 impl Histories {
     pub fn new() -> Self {
-        let mut history_per_cc = Vec::with_capacity(midi::CC_MAX);
-        for _ in 0..midi::CC_MAX {
-            history_per_cc.push(CcValueTimeHistory { history: VecDeque::with_capacity(MAX_HISTORY) });
+        let mut history_per_channel_per_cc = Vec::with_capacity(midi::CC_MAX * midi::CHANNEL_MAX);
+        for _ in 0..(midi::CC_MAX * midi::CHANNEL_MAX) {
+            history_per_channel_per_cc.push(CcValueTimeHistory { history: VecDeque::with_capacity(MAX_HISTORY) });
         }
     
         Self {
-            history_per_cc,
+            history_per_channel_per_cc,
             info_per_channel: [ChannelInfo::default(), ChannelInfo::default(), ChannelInfo::default(), ChannelInfo::default(), ChannelInfo::default(), ChannelInfo::default(), ChannelInfo::default(), ChannelInfo::default(), 
                                ChannelInfo::default(), ChannelInfo::default(), ChannelInfo::default(), ChannelInfo::default(), ChannelInfo::default(), ChannelInfo::default(), ChannelInfo::default(), ChannelInfo::default()],
             channel_id_count: 0,
         }
     }
-}
+
+    pub fn to_index(channel: u8, cc_num: u8) -> usize {
+        if channel >= 16 { return 15; }
+        if cc_num as usize >= midi::CC_MAX { return midi::CC_MAX; }
+        (channel as usize) * midi::CC_MAX + cc_num as usize
+    }
+
+    pub fn to_channel_cc_num(index: usize) -> (u8, u8) {
+        let channel = index / midi::CC_MAX;
+        let cc_num = index - (channel * midi::CC_MAX);
+        (channel as u8, cc_num as u8)
+    }
+
+    pub fn history_of_channel_cc(&self, channel: u8, cc_num: u8) -> &CcValueTimeHistory {
+        &self.history_per_channel_per_cc[Self::to_index(channel, cc_num)]
+    }
+
+    pub fn history_of_channel_cc_mut(&mut self, channel: u8, cc_num: u8) -> &mut CcValueTimeHistory {
+        &mut self.history_per_channel_per_cc[Self::to_index(channel, cc_num)]
+    }}
 
 
 /// State for a [`CcMeter`].
@@ -184,7 +203,7 @@ impl<'a, Message> CcMeter<'a, Message> {
     pub const CC_WIDTH_MAX:         f32 = 35.0;
     pub const CC_SLIDER_HEIGHT:     f32 = 128.0;
     pub const CC_VALUE_HEIGHT:      f32 = 15.0;
-    pub const CC_NAME_HEIGHT:       f32 = Self::CC_VALUE_HEIGHT;
+    pub const CC_NAME_HEIGHT:       f32 = Self::CC_VALUE_HEIGHT + 3.0;
     pub const CC_CANONICAL_HEIGHT:  f32 = Self::CC_VALUE_HEIGHT;
     pub const CC_CHANNEL_NAME_HT:   f32 = Self::CC_VALUE_HEIGHT;
     pub const UI_HEIGHT:            f32 = Self::CC_VERT_SPACER + Self::CC_SLIDER_HEIGHT + Self::CC_VALUE_HEIGHT 
@@ -257,7 +276,7 @@ impl<'a, Message> CcMeter<'a, Message> {
         let mut histories = self.state.histories.lock().unwrap();
         while let Some(item) = self.state.cc_queue.pop() {
             histories.info_per_channel[item.channel as usize].process(&item);
-            Self::add_entry(&mut histories.history_per_cc, item);
+            Self::add_entry(&mut histories, item);
         }
         let mut id = 0;     // Fist id used is 1, so ids are all in the range 1..=16
         let now = Instant::now();
@@ -273,17 +292,15 @@ impl<'a, Message> CcMeter<'a, Message> {
     }
 
     /// Updates current and historical values for a newly received CC message.
-    pub fn add_entry(history_per_cc: &mut [CcValueTimeHistory], value: CcValueTime) {
-        let cc_num = value.cc_num as usize;
-        if cc_num >= history_per_cc.len() { return; }   // Make sure cc_num isn't an invalid value; ignore if so
-        let entry = &mut history_per_cc[cc_num];
+    pub fn add_entry(histories: &mut Histories, value: CcValueTime) {
+        let entry = histories.history_of_channel_cc_mut(value.channel, value.cc_num);
         if entry.history.len() == MAX_HISTORY { entry.history.pop_front(); }
         entry.history.push_back(value);
     }
 
     pub fn count_of_active_ccs(&self) -> usize {
         let histories = self.state.histories.lock().unwrap();
-        histories.history_per_cc.iter().filter(|h| !h.history.is_empty()).count()
+        histories.history_per_channel_per_cc.iter().filter(|h| !h.history.is_empty()).count()
     }
 
     /// Sets the width of the [`CcMeter`].
@@ -375,12 +392,10 @@ where
         _viewport: &Rectangle,
     ) {
         self.update_from_state();
-        // FUTURE (multi-channels in one CC lane): let cc_count = self.count_of_active_ccs();
 
         let bounds = layout.bounds();
         let oy_vert_spacer = (Self::CC_VERT_SPACER / Self::UI_HEIGHT) * bounds.height;
-        let width_cc = Self::CC_WIDTH_MAX; // FUTURE (multi-channels in one CC lane): (bounds.width / cc_count as f32).clamp(Self::CC_WIDTH_MIN, Self::CC_WIDTH_MAX);
-        let width_dx_max = width_cc; // FUTURE (multi-channels in one CC lane): (width_cc * 0.5).max(1.0);
+        let width_cc = Self::CC_WIDTH_MAX;
         let should_show_labels = true || width_cc >= Self::CC_WIDTH_SHOW_LABELS;
         let height_cc_slider =  (Self::CC_SLIDER_HEIGHT    / Self::UI_HEIGHT) * bounds.height;
         let height_value =      (Self::CC_VALUE_HEIGHT     / Self::UI_HEIGHT) * bounds.height;
@@ -394,6 +409,7 @@ where
         let color_text = Color::from_rgb(0.0, 0.0, 1.0);
         // TODO: Font should scale with bounds.height/.width changing, too!  Need to measure?
 
+        let back_color_0 = Color::from_rgb(0.2, 0.2, 0.2);
         let back_colors = [ Color::from_rgb(0.2, 0.1, 0.1), Color::from_rgb(0.1, 0.1, 0.2) ];
         let now = Instant::now();
 
@@ -407,14 +423,17 @@ where
         }
 
         // Show the current value as a white line
-        let should_show_only_active = true;
         let hide_note_info = true;
         let histories = self.state.histories.lock().unwrap();
-        let mut i_cc = 0_usize;
-        for channel in 0..16 {
-            for (cc_num, history_per_cc) in histories.history_per_cc.iter().enumerate() {
+        let mut c_items_processed = 0_usize;
+        let mut count_of_channels_with_data = 0;
+        for channel in 0..16_u8 {       // TODO: Determine order by mode flags (e.g. MPE, MRU, etc.)
+            let start = Histories::to_index(channel, 0);
+            let end   = Histories::to_index(channel, midi::CC_MAX as u8 - 1);
+            for (cc_num, history) in histories.history_per_channel_per_cc[start..end].iter().enumerate() {
+                if history.history.is_empty() { continue; }
                 if hide_note_info {
-                    match Cc::from_index(cc_num as u8) {
+                    match Cc::from_cc_num(cc_num as u8) {
                         Cc::NoteOn      => { continue; }
                         Cc::NoteOff     => { continue; }
                         Cc::VelocityOn  => { continue; }
@@ -422,28 +441,22 @@ where
                         _ => { }
                     }
                 }
-                let i = if should_show_only_active { 
-                    if history_per_cc.is_empty_for_channel(channel) { continue; }
-                    let i = i_cc;
-                    i_cc += 1;
-                    i
-                } else { 
-                    cc_num 
-                };
+                let i_column = c_items_processed;
+                c_items_processed += 1;
                 
-                let x = bounds.x + (i as f32 * width_cc);
-                let back_color = back_colors[(channel & 1) as usize];
-
+                let x = bounds.x + (i_column as f32 * width_cc);
+                let back_color = if channel == 0 { back_color_0 } else { back_colors[(count_of_channels_with_data & 1) as usize] };
+    
                 // Fill the cc "slider" background for CC UI (i.e. LED, slider, and text areas)
                 renderer.fill_quad(quad_from_bounds(x, y_cc_slider, width_cc, height_cc_slider), back_color);
-
+    
                 // Draw the text
-                let last = history_per_cc.history.len() - 1;
+                let last = history.history.len() - 1;
                 if should_show_labels {
-                    let cc_value = history_per_cc.history[last].value;
+                    let cc_value = history.history[last].value;
                     let text_value = format!("{}", CcValueTime::f32_value_to_u8(cc_value));
                     let text_num   = &format!("c{cc_num}");
-                    let text_name  = midi::NAMES[cc_num].unwrap_or(text_num);
+                    let text_name  = midi::NAMES[cc_num as usize].unwrap_or(text_num);
                     let text_channel = &format!("{}", channel + 1);
                     let text_size = self
                         .text_size
@@ -490,11 +503,8 @@ where
                 
                 // Now draw individual historical values, ending with the most recent.
                 let index_offset = MAX_HISTORY - (last + 1);
-                for (i, cc_info) in history_per_cc.history.iter().enumerate() {
+                for (i, cc_info) in history.history.iter().enumerate() {
                     if cc_info.channel != channel { continue; }
-                    //let id_channel = 0; // FUTURE: histories.info_per_channel[channel as usize].id;
-                    let cx_channel = width_dx_max; // FUTURE: If multi channels in one CC column: if histories.channel_id_count == 0 { width_dx_max } else { width_dx_max / histories.channel_id_count as f32 };
-                    let ox_channel = 0_f32; // FUTURE: cx_channel * ((id_channel - 1) as f32);
                     let sec = now.duration_since(cc_info.instant).as_secs_f32(); 
                     const SEC_FADEOUT: f32 = 4.0;
                     // Remove 20ms to account for transit time from lib.rs thread to here.  This
@@ -511,9 +521,9 @@ where
                     // significantly brighter, even after "fading", but using lerp(), they don't
                     // get brighter when they stack, since the most recent one just "wins".
                     let (ox, color) = if i != last { 
-                        (lerp(order_frac, cx_channel, 1.0), lerp_color(age_frac.clamp(0.1, 1.0), back_color, Color::from_rgb(0.2, 0.9, 0.2))) 
+                        (lerp(order_frac, width_cc, 1.0), lerp_color(age_frac.clamp(0.1, 1.0), back_color, Color::from_rgb(0.2, 0.9, 0.2))) 
                     } else { 
-                        (lerp(age_frac, (4.0_f32).min(cx_channel), 0.0), 
+                        (lerp(age_frac, (4.0_f32).min(width_cc), 0.0), 
                         // NOTE: the "jolt" normally wouldn't work on the age_frac == 1.0 side, 
                         // since it is very likely that at least one instant has passed since the CC
                         // was transmitted.  But we "fix" this manually above, by subtracting 20msec,
@@ -522,9 +532,10 @@ where
                         )
                     };
                     let y = y_cc_slider + height_cc_slider  * (1.0 - cc_info.value);
-                    renderer.fill_quad(quad_from_bounds(x + ox_channel + ox, y, cx_channel - ox - ox, 1.0), color);
+                    renderer.fill_quad(quad_from_bounds(x + ox, y, width_cc - ox - ox, 1.0), color);
                 }
             }
+            count_of_channels_with_data += 1;
         }
     }
 

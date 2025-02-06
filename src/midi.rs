@@ -1,5 +1,8 @@
 
 #[allow(dead_code)]
+pub const CHANNEL_MAX: usize = 16;
+
+#[allow(dead_code)]
 #[derive(Copy, Clone, Debug)]
 pub enum Cc {
     Controller(u8),
@@ -100,9 +103,9 @@ impl Cc {
     }
 
     #[allow(dead_code)]
-    pub fn from_index(i: u8) -> Self {
-        match i {
-            0..=127 => Cc::Controller(i),
+    pub fn from_cc_num(cc_num: u8) -> Self {
+        match cc_num {
+            0..=127 => Cc::Controller(cc_num),
             128 => Cc::NoteAftertouch,
             129 => Cc::PitchBend,
             130 => Cc::ChannelAftertouch,

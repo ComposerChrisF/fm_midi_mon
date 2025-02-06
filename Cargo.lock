@@ -451,7 +451,7 @@ dependencies = [
 
 [[package]]
 name = "fm_midi_mon"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "atomic_float 1.1.0",
  "crossbeam",
