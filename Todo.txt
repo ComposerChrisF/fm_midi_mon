@@ -118,6 +118,7 @@
 ###################################################################################################
 ### VERSION HISTORY
 ###################################################################################################
+v0.0.3 (2025-02-05): Refactor (added Histories struct); Track note on/off; Switch to separate-set-of-columns-per-channel instead of cramming everything into one column (per CC).
 v0.0.2 (2025-01-29): Added poly/channel aftertouch; Allow for 4-char names; Added y/z MPE names; Canonical names always show; Fixed text vertical spacing; Update to current nih_plug (as of date)
 v0.0.1
 v0.0.0

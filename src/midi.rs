@@ -12,6 +12,77 @@ pub enum Cc {
     VelocityOff,
 }
 
+
+#[allow(dead_code)]
+#[derive(Copy, Clone, Debug)]
+pub enum SpecialControllers {
+    ModWheel = 1,
+    Breath = 2, 
+    Volume = 7,
+    Balance = 8,
+    Pan = 10,
+    Expression = 11,
+    SustainPedalOnOff = 64,
+    PortamentoOnOff = 65,
+    SostenutoOnOff = 66,
+    SoftPedalOnOff = 67,
+    LegatoOnOff = 68,
+    Pedal2OnOff = 69,
+    MpeY = 74,
+    ResetAllControllers = 121,
+    AllNotesOff = 123,  // (*is* All Notes Off!)
+    OmniModeOff = 124,  // Implies All Notes Off
+    OmniModeOn = 125,   // Implies All Notes Off
+    MonoModeOn = 126,   // Implies All Notes Off, Poly Off
+    PolyModeOn = 127,   // Implies All Notes Off, Mono Off
+}
+
+impl SpecialControllers {
+    #[allow(dead_code)]
+    pub fn from_cc_num(cc_num: u8) -> Option<SpecialControllers> {
+        match cc_num {
+              1 => Some(SpecialControllers::ModWheel),
+              2 => Some(SpecialControllers::Breath),
+              7 => Some(SpecialControllers::Volume),
+              8 => Some(SpecialControllers::Balance),
+             10 => Some(SpecialControllers::Pan),
+             11 => Some(SpecialControllers::Expression),
+             64 => Some(SpecialControllers::SustainPedalOnOff),
+             65 => Some(SpecialControllers::PortamentoOnOff),
+             66 => Some(SpecialControllers::SostenutoOnOff),
+             67 => Some(SpecialControllers::SoftPedalOnOff),
+             68 => Some(SpecialControllers::LegatoOnOff),
+             69 => Some(SpecialControllers::Pedal2OnOff),
+             74 => Some(SpecialControllers::MpeY),
+            121 => Some(SpecialControllers::ResetAllControllers),
+            123 => Some(SpecialControllers::AllNotesOff),
+            124 => Some(SpecialControllers::OmniModeOff),
+            125 => Some(SpecialControllers::OmniModeOn),
+            126 => Some(SpecialControllers::MonoModeOn),
+            127 => Some(SpecialControllers::PolyModeOn), 
+            _ => None,
+        }
+    }
+    #[allow(dead_code)]
+    pub fn does_cc_num_imply_all_notes_off(cc_num: u8) -> bool {
+        match Self::from_cc_num(cc_num) {
+            Some(v) => v.implies_all_notes_off(),
+            None => false,
+        }
+    }
+    #[allow(dead_code)]
+    pub fn implies_all_notes_off(self) -> bool {
+        match self {
+            SpecialControllers::AllNotesOff => true,
+            SpecialControllers::OmniModeOff => true,
+            SpecialControllers::OmniModeOn  => true,
+            SpecialControllers::MonoModeOn  => true,
+            SpecialControllers::PolyModeOn  => true,
+            _ => false,
+        }
+    }
+}
+
 pub const CC_MAX: usize = 135;      // Number of MIDI CC's, including our internal additions
 
 impl Cc {

@@ -1,4 +1,4 @@
-use cc_mon::{CcValueTime, CcValueTimeHistory};
+use cc_mon::{CcValueTime, Histories};
 use crossbeam::queue::ArrayQueue;
 use midi::Cc;
 use nih_plug::prelude::*;
@@ -15,7 +15,7 @@ mod cc_mon;
 struct MidiMonitor {
     params: Arc<MidiMonitorParams>,
     cc_queue: Arc<ArrayQueue<CcValueTime>>,
-    cc_histories: Arc<Mutex<Vec<CcValueTimeHistory>>>,    // Must be created with an entry for each CC.  Don't access directly from MidiMonitor thread, only from GUI thread!
+    histories: Arc<Mutex<Histories>>,    // Must be created with an entry for each CC.  Don't access directly from MidiMonitor thread, only from GUI thread!
 }
 
 #[derive(Params)]
@@ -34,7 +34,7 @@ impl Default for MidiMonitor {
         Self {
             params:   Arc::new(MidiMonitorParams::default()),
             cc_queue: Arc::new(ArrayQueue::<CcValueTime>::new(1000)),
-            cc_histories: cc_mon::create_cc_histories(),
+            histories: Arc::new(Mutex::new(cc_mon::Histories::new())),
         }
     }
 }
@@ -63,9 +63,9 @@ impl Default for MidiMonitorParams {
 }
 
 impl MidiMonitor {
-    fn send_u8( &mut self, cc_num: u8, value: u8 ) { self.send_f32(cc_num, CcValueTime::u8_value_to_f32(value)) }
-    fn send_f32(&mut self, cc_num: u8, value: f32) {
-        let cc = CcValueTime { cc_num, value, instant: Instant::now() };
+    fn send_u8( &mut self, channel: u8, cc_num: u8, value: u8 ) { self.send_f32(channel, cc_num, CcValueTime::u8_value_to_f32(value)) }
+    fn send_f32(&mut self, channel: u8, cc_num: u8, value: f32) {
+        let cc = CcValueTime { channel, cc_num, value, instant: Instant::now() };
         // When our GUI is not visible, the queue will fill up, since there's nothing reading from
         // the queue. This is perfectly okay, and force_push() will simply overwrite the oldest 
         // values in the queue.  This could cause some missed events, most notably, Note_Off 
@@ -102,7 +102,7 @@ impl Plugin for MidiMonitor {
         editor::create(
             self.params.clone(),
             self.cc_queue.clone(),
-            self.cc_histories.clone(),
+            self.histories.clone(),
             self.params.editor_state.clone(),
         )
     }
@@ -126,29 +126,29 @@ impl Plugin for MidiMonitor {
         while let Some(event) = context.next_event() {
             //self.sender.send(CcValueTime { cc: 0, value: 42, instant: Instant::now() }).unwrap();
             match event {
-                NoteEvent::MidiCC { timing:_, channel:_, cc, value } => {
+                NoteEvent::MidiCC { timing:_, channel, cc, value } => {
                     //self.sender.send(CcValueTime { cc: 1, value: 80, instant: Instant::now() }).unwrap();
-                    self.send_f32(cc, value);
+                    self.send_f32(channel, cc, value);
                 }
-                NoteEvent::NoteOn { timing:_, voice_id:_, channel:_, note, velocity } => {
+                NoteEvent::NoteOn { timing:_, voice_id:_, channel, note, velocity } => {
                     //self.sender.send(CcValueTime { cc: 2, value: 110, instant: Instant::now() }).unwrap();
-                    self.send_u8( Cc::NoteOn    .to_index(), note);
-                    self.send_f32(Cc::VelocityOn.to_index(), velocity);
+                    self.send_u8( channel, Cc::NoteOn    .to_index(), note);
+                    self.send_f32(channel, Cc::VelocityOn.to_index(), velocity);
                 }
-                NoteEvent::NoteOff { timing:_, voice_id:_, channel:_, note, velocity } => {
+                NoteEvent::NoteOff { timing:_, voice_id:_, channel, note, velocity } => {
                     //self.sender.send(CcValueTime { cc: 11, value: 10, instant: Instant::now() }).unwrap();
-                    self.send_u8( Cc::NoteOff    .to_index(), note);
-                    self.send_f32(Cc::VelocityOff.to_index(), velocity);
+                    self.send_u8( channel, Cc::NoteOff    .to_index(), note);
+                    self.send_f32(channel, Cc::VelocityOff.to_index(), velocity);
                 }
-                NoteEvent::MidiPitchBend { timing:_, channel:_, value } => {
+                NoteEvent::MidiPitchBend { timing:_, channel, value } => {
                     //self.sender.send(CcValueTime { cc: 10, value: 10, instant: Instant::now() }).unwrap();
-                    self.send_f32(Cc::PitchBend.to_index(), value);
+                    self.send_f32(channel, Cc::PitchBend.to_index(), value);
                 }
-                NoteEvent::MidiChannelPressure { timing:_, channel:_, pressure } => {
-                    self.send_f32(Cc::ChannelAftertouch.to_index(), pressure);
+                NoteEvent::MidiChannelPressure { timing:_, channel, pressure } => {
+                    self.send_f32(channel, Cc::ChannelAftertouch.to_index(), pressure);
                 }
-                NoteEvent::PolyPressure { timing:_, voice_id:_, channel:_, note:_, pressure } => {
-                    self.send_f32(Cc::NoteAftertouch.to_index(), pressure); // FUTURE: Need note, too!
+                NoteEvent::PolyPressure { timing:_, voice_id:_, channel, note:_, pressure } => {
+                    self.send_f32(channel, Cc::NoteAftertouch.to_index(), pressure); // FUTURE: Need note, too!
                 }
                 _ => {},
             }
