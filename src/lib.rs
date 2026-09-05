@@ -15,7 +15,7 @@ mod cc_mon;
 struct MidiMonitor {
     params: Arc<MidiMonitorParams>,
     cc_queue: Arc<ArrayQueue<CcValueTime>>,
-    histories: Arc<Mutex<Histories>>,    // Must be created with an entry for each CC.  Don't access directly from MidiMonitor thread, only from GUI thread!
+    histories: Arc<Mutex<Histories>>,    // Must be created with an entry for each CC.  Don't access directly from audio's process() thread, only from GUI thread!
 }
 
 #[derive(Params)]
