@@ -1,6 +1,31 @@
 ===================================================================================================
 === TO DO LIST
 ===================================================================================================
+1. Interpret Pitch Wheel data on a given channel and allow quantizing to fretted (nearest 12TET)
+    - Requires knowing input PW range and output PW change, and how to handle channel 1 (i.e.
+        MPE vs. not, and if MPE, should master PW be added to channel X value?)
+    - Start with poly mode--each channel processed independently (not really MPE, but somewhat 
+        compatible)
+2. Then, allow option for smooth portamento between notes, so the quantizing is based upon
+    having rested (not much movement distance on the Pitch Wheel for some period of time).
+3. Improve the "detection" and "locking" mechanisms that allow portamento (when portamento is allowed)
+    - Need to tweak this algorithm for its sensitivty to when:
+        - "note" locks in or changes
+        - Allowing vibrato on a locked note without unlocking
+        - Allowing vibrato on unlocked note and how that affects the "locking" 
+            - I.e. can we recognize vibrato as being "centered" and thus allow "locking" 
+                to happen, even if otherwise it wouldn't.  I.e. look at the time-averaged
+                pitch center to see if a "lock" should be active.  Or could look for pitch
+                variation that all lies within a vibrato range (default of +/- 49 cents)--
+                variation outside this range breaks the lock and is considered a port.  Of
+                import will be whether we look at the pitch as received ("a" from below), or
+                the pitch as adjusted (probably "f" from below) when deciding locks.
+    - Once locking becomes "active", pitch wheel messages are sent to set the current center
+        pitch to a 12TET value, and this centering happens over a (configurable) period of time.
+    - Logically, we have: (a) current pitch, based on MIDI note an PW data; (b) recent pitch average;
+        (c) recent pitch change; (d) is_lock_active; (e) locked pitch; (f) output pitch (locked plus 
+        allowed vibrato).
+
 - MIDI Features (for LinnStrument)
     - Learn MIDI pitch(es); watch X/Y/Z values for this and translate to other CCs, most notably
         pressure (Z) to CC1 (mod wheel)
@@ -9,6 +34,8 @@
             in fretted mode (where a series of MIDI notes are generated), or in portamento (fretless)
             mode where pitch wheel is used.  NOTE: Pitch Wheel could be used for both, just quantized
             in the "fretted" mode.
+        - Allow auto switch from first 1-3 keys to last 1-3 keys based on either: MIDI input (e.g. keyswitch, CC, etc.), 
+            last played note (if lower, then move MIDI CC pads to upper range; if higher, move MIDI CC pads to lower range).
     - Turn on/off for quantizing MIDI pitch information
         - I.e. put LinnStrument into un-quantized mode, but then do the quantizing in MidiMon so
             I can implement fretted vs. portamento, or quantizing to just intonations, etc.
